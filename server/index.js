@@ -1,21 +1,18 @@
-const {
-  client,
-  createTables,
-  createUser,
-  createSkill,
-  fetchUsers,
-  fetchSkills,
-  createUserSkill,
-  fetchUserSkills,
-  deleteUserSkill,
-  authenticate,
-  findUserByToken,
-} = require("./db");
+const { client, createTables, createUser, createSkill, fetchUsers, fetchSkills, createUserSkill, fetchUserSkills, deleteUserSkill, authenticate, findUserByToken } = require("./db");
 const express = require("express");
 const app = express();
 app.use(express.json());
 
 // TODO - create middleware function isLoggedIn; use in the /api/auth/me route
+
+const isLoggedIn = async (req, res, next) => {
+  try {
+    req.user = await findUserByToken(req.headers.authorization);
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
@@ -25,9 +22,9 @@ app.post("/api/auth/login", async (req, res, next) => {
   }
 });
 
-app.get("/api/auth/me", async (req, res, next) => {
+app.get("/api/auth/me", isLoggedIn, async (req, res, next) => {
   try {
-    res.send(await findUserByToken(req.headers.authorization));
+    res.send(req.user);
   } catch (ex) {
     next(ex);
   }
@@ -50,9 +47,14 @@ app.get("/api/users", async (req, res, next) => {
 });
 
 // TODO - use isLoggedIn middleware
-app.get("/api/users/:id/userSkills", async (req, res, next) => {
+app.get("/api/users/:id/userSkills", isLoggedIn, async (req, res, next) => {
   try {
     // TODO - verify that the req.user.id on the route matches the user id in req.params
+    if (req.params.id !== req.user.id) {
+      const error = Error("not authorized");
+      error.status = 401;
+      throw error;
+    }
 
     res.send(await fetchUserSkills(req.params.id));
   } catch (ex) {
@@ -61,13 +63,13 @@ app.get("/api/users/:id/userSkills", async (req, res, next) => {
 });
 
 // TODO - use isLoggedIn middleware
-app.delete("/api/users/:userId/userSkills/:id", async (req, res, next) => {
+app.delete("/api/users/:userId/userSkills/:id", isLoggedIn, async (req, res, next) => {
   try {
-    // if (req.params.userId !== req.user.id) {
-    //   const error = Error("not authorized");
-    //   error.status = 401;
-    //   throw error;
-    // }
+    if (req.params.userId !== req.user.id) {
+      const error = Error("not authorized");
+      error.status = 401;
+      throw error;
+    }
     await deleteUserSkill({ user_id: req.params.userId, id: req.params.id });
     res.sendStatus(204);
   } catch (ex) {
@@ -76,13 +78,13 @@ app.delete("/api/users/:userId/userSkills/:id", async (req, res, next) => {
 });
 
 // TODO - use isLoggedIn middleware
-app.post("/api/users/:id/userSkills", async (req, res, next) => {
+app.post("/api/users/:id/userSkills", isLoggedIn, async (req, res, next) => {
   try {
-    // if (req.params.id !== req.user.id) {
-    //   const error = Error("not authorized");
-    //   error.status = 401;
-    //   throw error;
-    // }
+    if (req.params.id !== req.user.id) {
+      const error = Error("not authorized");
+      error.status = 401;
+      throw error;
+    }
     res.status(201).send(
       await createUserSkill({
         user_id: req.params.id,
@@ -105,17 +107,16 @@ const init = async () => {
   console.log("connected to database");
   await createTables();
   console.log("tables created");
-  const [logan, chase, lincoln, boots, running, barking, dogTricks, meowing] =
-    await Promise.all([
-      createUser({ username: "logan", password: "password1" }),
-      createUser({ username: "chase", password: "password2" }),
-      createUser({ username: "lincoln", password: "password3" }),
-      createUser({ username: "boots", password: "password4" }),
-      createSkill({ name: "running" }),
-      createSkill({ name: "barking" }),
-      createSkill({ name: "dogTricks" }),
-      createSkill({ name: "meowing" }),
-    ]);
+  const [logan, chase, lincoln, boots, running, barking, dogTricks, meowing] = await Promise.all([
+    createUser({ username: "logan", password: "password1" }),
+    createUser({ username: "chase", password: "password2" }),
+    createUser({ username: "lincoln", password: "password3" }),
+    createUser({ username: "boots", password: "password4" }),
+    createSkill({ name: "running" }),
+    createSkill({ name: "barking" }),
+    createSkill({ name: "dogTricks" }),
+    createSkill({ name: "meowing" }),
+  ]);
 
   console.log("users", await fetchUsers());
   console.log("skills", await fetchSkills());
